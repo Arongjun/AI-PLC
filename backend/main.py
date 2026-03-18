@@ -77,7 +77,7 @@ async def call_ai(system_prompt: str, user_prompt: str, response_format: Optiona
                 f"{config['base_url'].rstrip('/')}/chat/completions",
                 headers=headers,
                 json=payload,
-                timeout=60.0
+                timeout=300.0
             )
             response.raise_for_status()
             result = response.json()
