@@ -9,14 +9,14 @@ services:
     environment:
       - DATABASE_URL=sqlite:///app/data/ai_plc.db
     ports:
-      - "8000:8000"
+      - "18000:18000"
     restart: always
 
   frontend:
     build: ./frontend
     container_name: ai-plc-frontend
     ports:
-      - "3000:3000"
+      - "13000:3000"
     depends_on:
       - backend
     restart: always
