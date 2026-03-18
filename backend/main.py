@@ -74,52 +74,63 @@ async def call_ai(system_prompt: str, user_prompt: str, response_format: Optiona
     #     payload["response_format"] = {"type": "json_object"}
 
     async with httpx.AsyncClient() as client:
-        try:
-            response = await client.post(
-                f"{config['base_url'].rstrip('/')}/chat/completions",
-                headers=headers,
-                json=payload,
-                timeout=300.0
-            )
-            
-            # Check for non-200 status codes explicitly
-            if response.status_code != 200:
-                raise HTTPException(status_code=response.status_code, detail=f"API Error ({response.status_code}): {response.text}")
-                
+        for attempt in range(3): # Try up to 3 times for transient gateway errors
             try:
-                result = response.json()
+                response = await client.post(
+                    f"{config['base_url'].rstrip('/')}/chat/completions",
+                    headers=headers,
+                    json=payload,
+                    timeout=300.0
+                )
+                
+                # If we get a gateway error, retry
+                if response.status_code in [502, 503, 504] and attempt < 2:
+                    print(f"Gateway error {response.status_code}, retrying (attempt {attempt + 1})...")
+                    continue
+
+                # Check for non-200 status codes explicitly
+                if response.status_code != 200:
+                    raise HTTPException(status_code=response.status_code, detail=f"API Error ({response.status_code}): {response.text}")
+                    
+                try:
+                    result = response.json()
+                except Exception as e:
+                    # This catches the 'Expecting value: line 1 column 1' error and shows the actual response text
+                    raise HTTPException(status_code=500, detail=f"API did not return valid JSON. Raw response: {response.text}")
+                
+                # Extract content safely
+                choices = result.get("choices", [])
+                if not choices:
+                    raise HTTPException(status_code=500, detail=f"API returned no choices. Response: {result}")
+                
+                content = choices[0].get("message", {}).get("content", "")
+                if not content:
+                    raise HTTPException(status_code=500, detail="API returned empty content")
+                    
+                # If response format is JSON, try to clean markdown code blocks
+                if response_format == "json_object":
+                    content = content.strip()
+                    if content.startswith("```json"):
+                        content = content[7:]
+                    if content.startswith("```"):
+                        content = content[3:]
+                    if content.endswith("```"):
+                        content = content[:-3]
+                    content = content.strip()
+                    
+                return content
+            except (httpx.ConnectError, httpx.TimeoutException) as e:
+                if attempt < 2:
+                    print(f"Connection error {str(e)}, retrying...")
+                    continue
+                raise HTTPException(status_code=504, detail=f"AI API Connection Timeout after 3 attempts: {str(e)}")
+            except HTTPException:
+                raise # Re-raise HTTPExceptions as-is
             except Exception as e:
-                # This catches the 'Expecting value: line 1 column 1' error and shows the actual response text
-                raise HTTPException(status_code=500, detail=f"API did not return valid JSON. Raw response: {response.text}")
-            
-            # Extract content safely
-            choices = result.get("choices", [])
-            if not choices:
-                raise HTTPException(status_code=500, detail=f"API returned no choices. Response: {result}")
-            
-            content = choices[0].get("message", {}).get("content", "")
-            if not content:
-                raise HTTPException(status_code=500, detail="API returned empty content")
-                
-            # If response format is JSON, try to clean markdown code blocks
-            if response_format == "json_object":
-                content = content.strip()
-                if content.startswith("```json"):
-                    content = content[7:]
-                if content.startswith("```"):
-                    content = content[3:]
-                if content.endswith("```"):
-                    content = content[:-3]
-                content = content.strip()
-                
-            return content
-        except HTTPException:
-            raise # Re-raise HTTPExceptions as-is
-        except Exception as e:
-            print(f"AI Call Error: {str(e)}")
-            if 'response' in locals():
-                print(f"Response Body: {response.text}")
-            raise HTTPException(status_code=500, detail=f"AI Request Failed: {str(e)}")
+                print(f"AI Call Error: {str(e)}")
+                if 'response' in locals():
+                    print(f"Response Body: {response.text}")
+                raise HTTPException(status_code=500, detail=f"AI Request Failed: {str(e)}")
 
 @app.post("/api/generate-preview", response_model=PreviewResponse)
 async def generate_preview(req: GeneratePreviewRequest):
