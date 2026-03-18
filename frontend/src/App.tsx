@@ -18,7 +18,10 @@ interface Variable {
   comment?: string;
 }
 
-const API_BASE = 'http://localhost:18000/api';
+// Dynamically set API_BASE based on current window location
+const API_BASE = window.location.hostname === 'localhost' 
+  ? 'http://localhost:18000/api' 
+  : `http://${window.location.hostname}:18000/api`;
 
 const App: React.FC = () => {
   const [step, setStep] = useState(1);
@@ -29,8 +32,17 @@ const App: React.FC = () => {
   const [finalCode, setFinalCode] = useState('');
   const [config, setConfig] = useState({ base_url: '', api_key: '', model_name: '' });
   const [showConfig, setShowConfig] = useState(false);
+  const [testingConfig, setTestingConfig] = useState(false);
+  const [testResult, setTestResult] = useState<{success: boolean; message: string} | null>(null);
 
   const mermaidRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // Load config on mount
+    axios.get(`${API_BASE}/config`).then(res => {
+      setConfig(res.data);
+    }).catch(err => console.error('Failed to load config:', err));
+  }, []);
 
   useEffect(() => {
     if (step === 2 && preview?.flowchart && mermaidRef.current) {
@@ -85,7 +97,23 @@ const App: React.FC = () => {
       setShowConfig(false);
       alert('配置已保存');
     } catch (err) {
-      alert('保存配置失败');
+      alert('保存配置失败: ' + ((err as any).response?.data?.detail || (err as any).message));
+    }
+  };
+
+  const handleTestConfig = async () => {
+    setTestingConfig(true);
+    setTestResult(null);
+    try {
+      const res = await axios.post(`${API_BASE}/test-config`, config);
+      setTestResult({ success: true, message: res.data.message });
+    } catch (err) {
+      setTestResult({ 
+        success: false, 
+        message: (err as any).response?.data?.detail || (err as any).message 
+      });
+    } finally {
+      setTestingConfig(false);
     }
   };
 
@@ -128,12 +156,28 @@ const App: React.FC = () => {
               onChange={e => setConfig({...config, model_name: e.target.value})}
             />
           </div>
-          <button 
-            onClick={handleSaveConfig}
-            className="mt-4 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-          >
-            保存配置
-          </button>
+          
+          {testResult && (
+            <div className={`mt-4 p-3 rounded text-sm ${testResult.success ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+              {testResult.message}
+            </div>
+          )}
+
+          <div className="mt-4 flex gap-4">
+            <button 
+              onClick={handleTestConfig}
+              disabled={testingConfig || !config.api_key}
+              className="bg-gray-100 text-gray-700 px-4 py-2 rounded hover:bg-gray-200 disabled:opacity-50 transition"
+            >
+              {testingConfig ? '测试中...' : '连通性测试'}
+            </button>
+            <button 
+              onClick={handleSaveConfig}
+              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition"
+            >
+              保存配置
+            </button>
+          </div>
         </div>
       )}
 

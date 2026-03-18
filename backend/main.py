@@ -144,6 +144,49 @@ async def update_config(config: ConfigSchema):
     db.close()
     return {"message": "Config updated"}
 
+@app.post("/api/test-config")
+async def test_config(config: ConfigSchema):
+    if not config.api_key:
+        raise HTTPException(status_code=400, detail="API Key not provided")
+    
+    headers = {
+        "Authorization": f"Bearer {config.api_key}",
+        "Content-Type": "application/json"
+    }
+    
+    payload = {
+        "model": config.model_name,
+        "messages": [{"role": "user", "content": "Hi"}],
+        "max_tokens": 5
+    }
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(
+                f"{config.base_url.rstrip('/')}/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=15.0
+            )
+            
+            if response.status_code == 200:
+                return {"message": "连接成功！配置有效。"}
+            else:
+                error_detail = response.text
+                try:
+                    error_json = response.json()
+                    error_detail = error_json.get("error", {}).get("message", response.text)
+                except:
+                    pass
+                raise HTTPException(status_code=response.status_code, detail=f"API 返回错误: {error_detail}")
+                
+        except httpx.ConnectError:
+            raise HTTPException(status_code=500, detail="无法连接到指定的 Base URL，请检查网络或地址是否正确。")
+        except httpx.TimeoutException:
+            raise HTTPException(status_code=504, detail="请求超时，请检查接口连通性。")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"连接失败: {str(e)}")
+
 @app.get("/api/config")
 async def get_current_config():
     return get_config()
