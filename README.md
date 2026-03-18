@@ -29,7 +29,7 @@ cd ai-plc
 ### 2. 部署服务
 确保您的机器已安装 Docker 和 Docker Compose。
 ```bash
-docker-compose up --build -d
+docker compose up --build -d
 ```
 
 ### 3. 访问与配置
