@@ -1,0 +1,27 @@
+# Node.js
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+env/
+.env
+
+# SQLite
+data/*.db
+data/*.db-journal
+
+# IDE
+.vscode/
+.idea/
+.DS_Store
+
+# Docker
+.dockerignore
