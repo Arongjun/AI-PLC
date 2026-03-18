@@ -81,17 +81,25 @@ async def call_ai(system_prompt: str, user_prompt: str, response_format: Optiona
                 json=payload,
                 timeout=300.0
             )
-            response.raise_for_status()
-            result = response.json()
+            
+            # Check for non-200 status codes explicitly
+            if response.status_code != 200:
+                raise HTTPException(status_code=response.status_code, detail=f"API Error ({response.status_code}): {response.text}")
+                
+            try:
+                result = response.json()
+            except Exception as e:
+                # This catches the 'Expecting value: line 1 column 1' error and shows the actual response text
+                raise HTTPException(status_code=500, detail=f"API did not return valid JSON. Raw response: {response.text}")
             
             # Extract content safely
             choices = result.get("choices", [])
             if not choices:
-                raise ValueError(f"API returned no choices. Response: {result}")
+                raise HTTPException(status_code=500, detail=f"API returned no choices. Response: {result}")
             
             content = choices[0].get("message", {}).get("content", "")
             if not content:
-                raise ValueError("API returned empty content")
+                raise HTTPException(status_code=500, detail="API returned empty content")
                 
             # If response format is JSON, try to clean markdown code blocks
             if response_format == "json_object":
@@ -105,8 +113,9 @@ async def call_ai(system_prompt: str, user_prompt: str, response_format: Optiona
                 content = content.strip()
                 
             return content
+        except HTTPException:
+            raise # Re-raise HTTPExceptions as-is
         except Exception as e:
-            # Print full error for debugging
             print(f"AI Call Error: {str(e)}")
             if 'response' in locals():
                 print(f"Response Body: {response.text}")
@@ -124,7 +133,7 @@ async def generate_preview(req: GeneratePreviewRequest):
             variables=data.get("variables", [])
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to parse AI response: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to parse AI response: {str(e)}. Raw AI Content: {ai_content}")
 
 @app.post("/api/generate-code", response_model=CodeResponse)
 async def generate_code(req: GenerateCodeRequest):
