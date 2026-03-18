@@ -81,8 +81,25 @@ async def call_ai(system_prompt: str, user_prompt: str, response_format: Optiona
             )
             response.raise_for_status()
             result = response.json()
-            return result["choices"][0]["message"]["content"]
+            content = result["choices"][0]["message"]["content"]
+            
+            # If response format is JSON, try to clean markdown code blocks
+            if response_format == "json_object":
+                content = content.strip()
+                if content.startswith("```json"):
+                    content = content[7:]
+                if content.startswith("```"):
+                    content = content[3:]
+                if content.endswith("```"):
+                    content = content[:-3]
+                content = content.strip()
+                
+            return content
         except Exception as e:
+            # Print full error for debugging
+            print(f"AI Call Error: {str(e)}")
+            if 'response' in locals():
+                print(f"Response Body: {response.text}")
             raise HTTPException(status_code=500, detail=f"AI Request Failed: {str(e)}")
 
 @app.post("/api/generate-preview", response_model=PreviewResponse)
