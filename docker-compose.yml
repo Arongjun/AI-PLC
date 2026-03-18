@@ -5,7 +5,7 @@ services:
     volumes:
       - ./data:/app/data
     environment:
-      - DATABASE_URL=sqlite:///app/data/ai_plc.db
+      - DATABASE_URL=sqlite:////app/data/ai_plc.db
     ports:
       - "18000:18000"
     restart: always

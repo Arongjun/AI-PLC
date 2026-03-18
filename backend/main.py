@@ -14,7 +14,7 @@ from prompts import SYSTEM_PROMPT_PREVIEW, SYSTEM_PROMPT_CODE
 
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./data/ai_plc.db")
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:////app/data/ai_plc.db")
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
