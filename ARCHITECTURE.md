@@ -45,8 +45,8 @@
 
 - **SQLite**: 使用轻量化数据库存储用户 AI 接口配置及历史项目记录。
 - **Docker Compose**: 
-  - `backend` 容器负责 AI 调度与 DB 操作。
-  - `frontend` 容器使用 Nginx 托管构建后的 React 应用。
+  - `backend` 容器负责 AI 调度与 DB 操作，对外暴露端口 **`18000`**。
+  - `frontend` 容器使用 Nginx 托管构建后的 React 应用，对外暴露端口 **`13000`**。
   - 通过 `volumes` 挂载 `./data` 目录实现数据库文件的持久化。
 
 ## 🔒 安全说明
