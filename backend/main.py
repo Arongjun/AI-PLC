@@ -1,5 +1,6 @@
-from fastapi import FastAPI, HTTPException, Body
+from fastapi import FastAPI, HTTPException, Body, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from sqlalchemy import create_engine, MetaData
 from sqlalchemy.orm import sessionmaker
 from typing import List, Optional
@@ -73,6 +74,13 @@ async def call_ai(system_prompt: str, user_prompt: str, response_format: Optiona
     # if response_format == "json_object":
     #     payload["response_format"] = {"type": "json_object"}
 
+    # LOGGING: Help user debug why usage is not showing
+    print(f"--- AI API REQUEST ---")
+    print(f"URL: {config['base_url'].rstrip('/')}/chat/completions")
+    print(f"Model: {config['model_name']}")
+    print(f"Payload Size: {len(json.dumps(payload))} bytes")
+    print(f"----------------------")
+
     async with httpx.AsyncClient() as client:
         for attempt in range(3): # Try up to 3 times for transient gateway errors
             try:
@@ -132,23 +140,40 @@ async def call_ai(system_prompt: str, user_prompt: str, response_format: Optiona
                     print(f"Response Body: {response.text}")
                 raise HTTPException(status_code=500, detail=f"AI Request Failed: {str(e)}")
 
-@app.post("/api/generate-preview", response_model=PreviewResponse)
+@app.post("/api/generate-preview")
 async def generate_preview(req: GeneratePreviewRequest):
-    user_prompt = f"需求: {req.demand}\nPLC 型号: {req.plc_model}"
-    ai_content = await call_ai(SYSTEM_PROMPT_PREVIEW, user_prompt, response_format="json_object")
-    
-    try:
-        data = json.loads(ai_content)
-        return PreviewResponse(
-            flowchart=data.get("flowchart", ""),
-            variables=data.get("variables", [])
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to parse AI response: {str(e)}. Raw AI Content: {ai_content}")
+    async def sse_generator():
+        try:
+            yield f"data: {json.dumps({'type': 'status', 'message': '正在读取系统配置与 API 密钥...'})}\n\n"
+            config = get_config()
+            
+            yield f"data: {json.dumps({'type': 'status', 'message': f'正在连接 AI 模型: {config.get('model_name')}...'})}\n\n"
+            user_prompt = f"需求: {req.demand}\nPLC 型号: {req.plc_model}"
+            
+            yield f"data: {json.dumps({'type': 'status', 'message': '正在请求 AI 生成预览数据 (通常耗时 5-30秒)...'})}\n\n"
+            ai_content = await call_ai(SYSTEM_PROMPT_PREVIEW, user_prompt, response_format="json_object")
+            
+            yield f"data: {json.dumps({'type': 'status', 'message': '收到响应，正在解析逻辑结构...'})}\n\n"
+            try:
+                data = json.loads(ai_content)
+                yield f"data: {json.dumps({'type': 'result', 'data': data})}\n\n"
+            except Exception as e:
+                error_msg = f"解析 AI 响应失败: {str(e)}. 原始内容: {ai_content}"
+                yield f"data: {json.dumps({'type': 'error', 'message': error_msg})}\n\n"
+                
+        except HTTPException as he:
+            yield f"data: {json.dumps({'type': 'error', 'message': he.detail})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
 
-@app.post("/api/generate-code", response_model=CodeResponse)
+    return StreamingResponse(sse_generator(), media_type="text/event-stream")
+
+@app.post("/api/generate-code")
 async def generate_code(req: GenerateCodeRequest):
-    user_prompt = f"""
+    async def sse_generator():
+        try:
+            yield f"data: {json.dumps({'type': 'status', 'message': '正在加载已确认的逻辑与变量表...'})}\n\n"
+            user_prompt = f"""
 需求: {req.demand}
 PLC 型号: {req.plc_model}
 已确认流程图逻辑:
@@ -158,23 +183,30 @@ PLC 型号: {req.plc_model}
 
 请基于以上确认的信息生成最终的 PLC 代码。
 """
-    code = await call_ai(SYSTEM_PROMPT_CODE, user_prompt)
-    
-    # Save to history (optional but recommended)
-    db = SessionLocal()
-    new_project = Project(
-        name=f"Project_{req.plc_model}",
-        plc_model=req.plc_model,
-        demand=req.demand,
-        flowchart=req.flowchart,
-        variables=[v.dict() for v in req.variables],
-        final_code=code
-    )
-    db.add(new_project)
-    db.commit()
-    db.close()
-    
-    return CodeResponse(code=code)
+            yield f"data: {json.dumps({'type': 'status', 'message': '正在请求 AI 生成最终 PLC 代码...'})}\n\n"
+            code = await call_ai(SYSTEM_PROMPT_CODE, user_prompt)
+            
+            yield f"data: {json.dumps({'type': 'status', 'message': '正在保存项目记录到数据库...'})}\n\n"
+            db = SessionLocal()
+            new_project = Project(
+                name=f"Project_{req.plc_model}",
+                plc_model=req.plc_model,
+                demand=req.demand,
+                flowchart=req.flowchart,
+                variables=[v.dict() for v in req.variables],
+                final_code=code
+            )
+            db.add(new_project)
+            db.commit()
+            db.close()
+            
+            yield f"data: {json.dumps({'type': 'result', 'data': {'code': code}})}\n\n"
+        except HTTPException as he:
+            yield f"data: {json.dumps({'type': 'error', 'message': he.detail})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+
+    return StreamingResponse(sse_generator(), media_type="text/event-stream")
 
 @app.post("/api/config")
 async def update_config(config: ConfigSchema):

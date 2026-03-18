@@ -78,14 +78,52 @@ const App: React.FC = () => {
     addLog(`需求分析: ${demand.substring(0, 50)}...`);
     
     try {
-      const res = await axios.post(`${API_BASE}/generate-preview`, { demand, plc_model: plcModel });
-      addLog('AI 响应成功，解析数据中...');
-      setPreview(res.data);
-      setStep(2);
-      addLog('预览生成完成，请在右侧确认逻辑与变量表。');
+      const response = await fetch(`${API_BASE}/generate-preview`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ demand, plc_model: plcModel }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || '请求失败');
+      }
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (!reader) throw new Error('无法读取响应流');
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const payload = JSON.parse(line.substring(6));
+              if (payload.type === 'status') {
+                addLog(payload.message);
+              } else if (payload.type === 'result') {
+                setPreview(payload.data);
+                setStep(2);
+                addLog('✅ 预览生成完成，请在右侧确认逻辑与变量表。');
+              } else if (payload.type === 'error') {
+                addLog(`❌ 错误: ${payload.message}`);
+                alert('生成失败: ' + payload.message);
+              }
+            } catch (e) {
+              console.error('Parse SSE error:', e, line);
+            }
+          }
+        }
+      }
     } catch (err) {
-      const errorMsg = (err as any).response?.data?.detail || (err as any).message;
-      addLog(`❌ 错误: ${errorMsg}`);
+      const errorMsg = (err as any).message;
+      addLog(`❌ 网络错误: ${errorMsg}`);
       alert('生成预览失败: ' + errorMsg);
     } finally {
       setLoading(false);
@@ -98,18 +136,57 @@ const App: React.FC = () => {
     addLog('用户确认无误，开始生成最终 PLC 代码...');
     
     try {
-      const res = await axios.post(`${API_BASE}/generate-code`, {
-        demand,
-        plc_model: plcModel,
-        flowchart: preview.flowchart,
-        variables: preview.variables
+      const response = await fetch(`${API_BASE}/generate-code`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          demand,
+          plc_model: plcModel,
+          flowchart: preview.flowchart,
+          variables: preview.variables
+        }),
       });
-      addLog('代码生成成功！');
-      setFinalCode(res.data.code);
-      setStep(3);
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || '请求失败');
+      }
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (!reader) throw new Error('无法读取响应流');
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const payload = JSON.parse(line.substring(6));
+              if (payload.type === 'status') {
+                addLog(payload.message);
+              } else if (payload.type === 'result') {
+                setFinalCode(payload.data.code);
+                setStep(3);
+                addLog('✅ 代码生成成功！');
+              } else if (payload.type === 'error') {
+                addLog(`❌ 错误: ${payload.message}`);
+                alert('生成失败: ' + payload.message);
+              }
+            } catch (e) {
+              console.error('Parse SSE error:', e, line);
+            }
+          }
+        }
+      }
     } catch (err) {
-      const errorMsg = (err as any).response?.data?.detail || (err as any).message;
-      addLog(`❌ 错误: ${errorMsg}`);
+      const errorMsg = (err as any).message;
+      addLog(`❌ 网络错误: ${errorMsg}`);
       alert('生成代码失败: ' + errorMsg);
     } finally {
       setLoading(false);
