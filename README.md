@@ -22,8 +22,8 @@
 
 ### 1. 克隆项目
 ```bash
-git clone https://github.com/Arongjun/AI-PLC.git
-cd AI-PLC
+git clone https://github.com/arongjun/ai-plc.git
+cd ai-plc
 ```
 
 ### 2. 部署服务
