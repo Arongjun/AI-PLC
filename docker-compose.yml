@@ -14,7 +14,7 @@ services:
     build: ./frontend
     container_name: ai-plc-frontend
     ports:
-      - "13000:3000"
+      - "13000:80"
     depends_on:
       - backend
     restart: always

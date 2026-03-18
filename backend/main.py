@@ -8,9 +8,9 @@ import httpx
 import os
 from dotenv import load_dotenv
 
-from .models import Base, Project, Config
-from .schemas import GeneratePreviewRequest, GenerateCodeRequest, PreviewResponse, CodeResponse, ConfigSchema
-from .prompts import SYSTEM_PROMPT_PREVIEW, SYSTEM_PROMPT_CODE
+from models import Base, Project, Config
+from schemas import GeneratePreviewRequest, GenerateCodeRequest, PreviewResponse, CodeResponse, ConfigSchema
+from prompts import SYSTEM_PROMPT_PREVIEW, SYSTEM_PROMPT_CODE
 
 load_dotenv()
 
