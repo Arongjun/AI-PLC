@@ -33,8 +33,8 @@ docker-compose up --build -d
 ```
 
 ### 3. 访问与配置
-- 前端地址：`http://localhost:3000`
-- 后端 API：`http://localhost:8000`
+- 前端地址：`http://localhost:13000`
+- 后端 API：`http://localhost:18000`
 - **初次使用**：点击右上角设置图标，配置您的 AI 接口参数（Base URL, API Key, Model）。
 
 ## 📂 目录结构
