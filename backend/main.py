@@ -146,8 +146,9 @@ async def generate_preview(req: GeneratePreviewRequest):
         try:
             yield f"data: {json.dumps({'type': 'status', 'message': '正在读取系统配置与 API 密钥...'})}\n\n"
             config = get_config()
+            model_name = config.get('model_name', 'Unknown')
             
-            yield f"data: {json.dumps({'type': 'status', 'message': f'正在连接 AI 模型: {config.get('model_name')}...'})}\n\n"
+            yield f"data: {json.dumps({'type': 'status', 'message': f'正在连接 AI 模型: {model_name}...'})}\n\n"
             user_prompt = f"需求: {req.demand}\nPLC 型号: {req.plc_model}"
             
             yield f"data: {json.dumps({'type': 'status', 'message': '正在请求 AI 生成预览数据 (通常耗时 5-30秒)...'})}\n\n"
