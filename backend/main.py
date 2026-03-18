@@ -68,8 +68,10 @@ async def call_ai(system_prompt: str, user_prompt: str, response_format: Optiona
         ]
     }
     
-    if response_format == "json_object":
-        payload["response_format"] = {"type": "json_object"}
+    # Remove response_format from payload to ensure compatibility with third-party APIs (like grok)
+    # Most models will output JSON if instructed in the system prompt.
+    # if response_format == "json_object":
+    #     payload["response_format"] = {"type": "json_object"}
 
     async with httpx.AsyncClient() as client:
         try:
@@ -81,8 +83,16 @@ async def call_ai(system_prompt: str, user_prompt: str, response_format: Optiona
             )
             response.raise_for_status()
             result = response.json()
-            content = result["choices"][0]["message"]["content"]
             
+            # Extract content safely
+            choices = result.get("choices", [])
+            if not choices:
+                raise ValueError(f"API returned no choices. Response: {result}")
+            
+            content = choices[0].get("message", {}).get("content", "")
+            if not content:
+                raise ValueError("API returned empty content")
+                
             # If response format is JSON, try to clean markdown code blocks
             if response_format == "json_object":
                 content = content.strip()
